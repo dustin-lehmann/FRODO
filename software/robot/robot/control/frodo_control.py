@@ -2,6 +2,7 @@ import enum
 import threading
 
 from robot.communication.frodo_communication import FRODO_Communication
+from robot.control.frodo_joystick_control import StandaloneJoystickControl
 from robot.control.frodo_navigation import FRODO_Navigator
 from robot.lowlevel.frodo_ll_definition import motor_input_struct, FRODO_LL_ADDRESS_TABLE, FRODO_LL_Functions
 from utils.callbacks import callback_handler, CallbackContainer
@@ -36,12 +37,13 @@ class FRODO_Control:
     communication: FRODO_Communication
     mode: FRODO_Control_Mode
     navigation: FRODO_Navigator
+    joystick: StandaloneJoystickControl
 
     task: threading.Thread
 
     callbacks: FRODO_Control_Callbacks
     events: FRODO_Control_Events
-    _update_time = 10
+    _update_time = 0.01
     _exit: bool = False
     exit: ExitHandler
 
@@ -49,6 +51,7 @@ class FRODO_Control:
         self.communication = communication
         self.mode = FRODO_Control_Mode.OFF
         self.navigation = FRODO_Navigator()
+        self.joystick = StandaloneJoystickControl()
 
         self.task = threading.Thread(target=self._task, daemon=True)
         self.update_timer = IntervalTimer(self._update_time)
@@ -59,11 +62,13 @@ class FRODO_Control:
 
     # ------------------------------------------------------------------------------------------------------------------
     def init(self):
-        ...
+        self.joystick.init()
 
     # ------------------------------------------------------------------------------------------------------------------
     def start(self):
         self.task.start()
+        self.navigation.start()
+        self.joystick.start()
 
     # ------------------------------------------------------------------------------------------------------------------
     def close(self, *args, **kwargs):
@@ -74,15 +79,27 @@ class FRODO_Control:
     # ------------------------------------------------------------------------------------------------------------------
     def _task(self):
         self.update_timer.reset()
-
         while not self._exit:
+            self._update()
             self.update_timer.sleep_until_next()
+
 
     # ------------------------------------------------------------------------------------------------------------------
     def _update(self):
-        ...
+        speed_left = 0.0
+        speed_right = 0.0
+        if self.mode == FRODO_Control_Mode.EXTERNAL:
+            speed_left, speed_right = self.joystick.getInputs()
+        elif self.mode == FRODO_Control_Mode.NAVIGATION:
+            speed_left, speed_right = self.navigation.getInputs()
 
+        self.setSpeed(speed_left=speed_left, speed_right=speed_right)
+
+        
+    # ------------------------------------------------------------------------------------------------------------------
     def setMode(self, mode: FRODO_Control_Mode):
+        if isinstance(mode, int):
+            mode = FRODO_Control_Mode(mode)
         self.mode = mode
         logger.info(f"Set control mode to {mode.name}")
 

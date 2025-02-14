@@ -66,6 +66,18 @@ class FRODO:
                                            description='Get Data',
                                            )
 
+        # Add Movement Command to Navigation
+        self.communication.wifi.addCommand(identifier='addNavigationMovement',
+                                            callback=self.control.navigation.addMovement,
+                                            arguments=['dphi', 'radius', 'vtime'],
+                                            description='Add Movement to Navigator Queue')
+        
+        # Switch FRODO Control Mode
+        self.communication.wifi.addCommand(identifier='setControlMode',
+                                            callback=self.control.setMode,
+                                            arguments=['mode'],
+                                            description='Switch Control Mode')
+
         # Set LEDs
 
         self.exit = ExitHandler(self.close)
