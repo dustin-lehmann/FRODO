@@ -10,24 +10,25 @@ VELOCITY_AT_1 = 206
 DIST_BETWEEN_MOTORS = 140  # [mm]
 TIME_SCALER = 4 / 3
 RADIUS_SCALER = 4 / 5
-TASK_SLEEP_TIME = 1
+TASK_SLEEP_TIME = 0.01
 
 
 # ======================================================================================================================
 class FRODO_Navigator:
-    speed_left: float # -1.0 <= speed_left <= 1.0
-    speed_right: float # -1.0 <= speed_right <= 1.0
+    speed_left : float # -1.0 <= speed_left <= 1.0
+    speed_right : float # -1.0 <= speed_right <= 1.0
 
-    movements: list  # movement structure: [dphi, radius, time]
+    movements : list  # movement structure: [dphi, radius, time]
     '''List of Movement Commands'''
 
-    queue_lock: threading.Lock
+    queue_lock : threading.Lock
     '''Lock to synchronize Read/Write on Movement List'''
 
-    _speed_lock: threading.Lock
+    _speed_lock : threading.Lock
     '''Lock to synchronize Read/Write on motor speed requirement'''
 
-    _update_task: threading.Thread
+    _update_task : threading.Thread
+    _stopped : bool
 
     # ------------------------------------------------------------------------------------------------------------------
     def __init__(self):
@@ -39,11 +40,25 @@ class FRODO_Navigator:
         self.speed_left = 0.0
         self.speed_right = 0.0
 
-        self._update_task = threading.Thread(target=self._movementTask)
+        self._stopped = True
+
+        self._update_task = threading.Thread(target=self._movementTask, daemon=True)
 
     # ------------------------------------------------------------------------------------------------------------------
     def start(self):
+        '''Start thread task but don't start moving'''
         self._update_task.start()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def startMovement(self):
+        self._stopped = False        
+    # ------------------------------------------------------------------------------------------------------------------
+    def stopMovement(self):
+        self._stopped = True
+        with self._speed_lock:
+            self.speed_left = 0.0
+            self.speed_right = 0.0
+        
 
     # ------------------------------------------------------------------------------------------------------------------
     def addMovements(self, movements):
@@ -81,17 +96,18 @@ class FRODO_Navigator:
             - if list empty: sleep'''
         while True:
             try:
-                if len(self.movements) > 0:
+                if not self._stopped and len(self.movements) > 0:
                     with self.queue_lock:
                         movement = self.movements.pop(0)
                     if len(movement) == 2:
                         self._calculateMovement(dphi=movement[0], radius=movement[1])
                     elif len(movement) == 3:
                         self._calculateMovement(dphi=movement[0], radius=movement[1], vtime=movement[2])
+                else:
+                    time.sleep(TASK_SLEEP_TIME)
             except Exception as e:
                 print("Error in Movement Task!")
                 print(e)
-            time.sleep(TASK_SLEEP_TIME)
 
     def _calculateMovement(self, dphi=0, radius=0, vtime=0):
         '''Calculate necessary parameters and write speeds to self.speed_left/right
@@ -136,13 +152,17 @@ class FRODO_Navigator:
             self.speed_right = s_r
     
         if vtime > estimated_time:
-            time.sleep(estimated_time)
-            with self._speed_lock:
-                self.speed_left = 0.0
-                self.speed_right = 0.0
+            if estimated_time > 0:
+                time.sleep(estimated_time)
+                with self._speed_lock:
+                    self.speed_left = 0.0
+                    self.speed_right = 0.0
             time.sleep(vtime-estimated_time)
         else:
-            time.sleep(vtime)
+            if vtime == -1:
+                time.sleep(estimated_time)
+            else:
+                time.sleep(vtime)
             if len(self.movements) == 0:
                 with self._speed_lock:
                     self.speed_left = 0.0

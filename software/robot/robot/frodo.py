@@ -72,6 +72,18 @@ class FRODO:
                                             arguments=['dphi', 'radius', 'vtime'],
                                             description='Add Movement to Navigator Queue')
         
+        # Start Navigation Movement
+        self.communication.wifi.addCommand(identifier='startNavigationMovement',
+                                            callback=self.control.navigation.startMovement,
+                                            arguments=[],
+                                            description='Start moving controlled by navigation movement queue.')
+        
+        # Stop Navigation Movement
+        self.communication.wifi.addCommand(identifier='stopNavigationMovement',
+                                            callback=self.control.navigation.stopMovement,
+                                            arguments=[],
+                                            description='Stop moving controlled by navigation movement queue.')
+        
         # Switch FRODO Control Mode
         self.communication.wifi.addCommand(identifier='setControlMode',
                                             callback=self.control.setMode,
