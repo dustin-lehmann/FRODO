@@ -15,11 +15,18 @@ TASK_SLEEP_TIME = 0.01
 
 # ======================================================================================================================
 class FRODO_Navigator:
-    speed_left : float # -1.0 <= speed_left <= 1.0
-    speed_right : float # -1.0 <= speed_right <= 1.0
+    speed_left : float 
+    '''input for left motor\n
+    -1.0 <= speed_left <= 1.0'''
+    speed_right : float 
+    '''input for right motor\n
+    -1.0 <= speed_right <= 1.0'''
 
     movements : list  # movement structure: [dphi, radius, time]
     '''List of Movement Commands'''
+
+    pause_event : threading.Event
+    '''Event to be able to stop sleeps early to pause movement'''
 
     queue_lock : threading.Lock
     '''Lock to synchronize Read/Write on Movement List'''
@@ -33,6 +40,8 @@ class FRODO_Navigator:
     # ------------------------------------------------------------------------------------------------------------------
     def __init__(self):
         self.movements = []
+
+        self.pause_event = threading.Event()
 
         self.queue_lock = threading.Lock()
         self._speed_lock = threading.Lock()
@@ -51,14 +60,30 @@ class FRODO_Navigator:
 
     # ------------------------------------------------------------------------------------------------------------------
     def startMovement(self):
-        self._stopped = False        
+        self._stopped = False    
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def continueMovement(self):
+        self.pause_event.clear()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    def pauseMovement(self):
+        self.pause_event.set()
+        with self._speed_lock:
+            self.speed_left = 0.0
+            self.speed_right = 0.0
+
     # ------------------------------------------------------------------------------------------------------------------
     def stopMovement(self):
         self._stopped = True
         with self._speed_lock:
             self.speed_left = 0.0
             self.speed_right = 0.0
-        
+
+    #  ------------------------------------------------------------------------------------------------------------------    
+    def clearMovementQueue(self):
+        with self.queue_lock:
+            self.queue = []
 
     # ------------------------------------------------------------------------------------------------------------------
     def addMovements(self, movements):
@@ -153,20 +178,43 @@ class FRODO_Navigator:
     
         if vtime > estimated_time:
             if estimated_time > 0:
-                time.sleep(estimated_time)
+                self._sleep(estimated_time, s_l, s_r)
+                
                 with self._speed_lock:
                     self.speed_left = 0.0
                     self.speed_right = 0.0
-            time.sleep(vtime-estimated_time)
+            self._sleep(vtime-estimated_time, 0.0, 0.0)
         else:
             if vtime == -1:
-                time.sleep(estimated_time)
+                self._sleep(estimated_time, s_l, s_r)
             else:
-                time.sleep(vtime)
+                self._sleep(vtime, s_l, s_r)
             if len(self.movements) == 0:
                 with self._speed_lock:
                     self.speed_left = 0.0
                     self.speed_right = 0.0
+
+    def _sleep(self, sleep_time, speed_left, speed_right):
+        '''try to sleep for $sleep_time, if interrupted: set speeds \n
+            and try to get back to sleep until sleep_time is over!'''
+        rest_rest_time = self._rest(sleep_time)
+        while rest_rest_time > 0:
+            with self._speed_lock:
+                self.speed_left = speed_left
+                self.speed_right = speed_right
+            rest_rest_time = self._rest(rest_rest_time)
+
+    def _rest(self, rest_time):
+        t_start = time.time()
+        self.pause_event.wait(rest_time)
+        if self.pause_event.is_set():
+            t_stop = time.time()
+            nap_time = rest_time - (t_stop - t_start)
+            while self.pause_event.is_set():
+                time.sleep(TASK_SLEEP_TIME)
+            alpha = 0.25
+            return nap_time * (1-alpha + alpha * TIME_SCALER)
+        return 0
 
     # === PRIVATE METHODS ==============================================================================================
 

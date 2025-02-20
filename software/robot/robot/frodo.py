@@ -82,8 +82,26 @@ class FRODO:
         self.communication.wifi.addCommand(identifier='stopNavigationMovement',
                                             callback=self.control.navigation.stopMovement,
                                             arguments=[],
-                                            description='Stop moving controlled by navigation movement queue.')
+                                            description='Stop moving controlled by navigation movement queue and drop current movement.')
         
+        # Pause Navigation Movement
+        self.communication.wifi.addCommand(identifier='pauseNavigationMovement',
+                                            callback=self.control.navigation.pauseMovement,
+                                            arguments=[],
+                                            description='Pause moving controlled by navigation and keep current movement.')
+        
+        # Continue Navigation Movement
+        self.communication.wifi.addCommand(identifier='continueNavigationMovement',
+                                            callback=self.control.navigation.continueMovement,
+                                            arguments=[],
+                                            description='Continue previously paused movement.')
+
+        # Clear Navigation Movement Queue
+        self.communication.wifi.addCommand(identifier='clearNavigationMovementQueue',
+                                            callback=self.control.navigation.clearMovementQueue,
+                                            arguments=[],
+                                            description='Clear navigation movement queue.')
+
         # Switch FRODO Control Mode
         self.communication.wifi.addCommand(identifier='setControlMode',
                                             callback=self.control.setMode,
