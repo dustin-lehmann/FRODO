@@ -18,7 +18,9 @@ from utils.events import EventListener
 class FRODO_ArucoMeasurement_processed:
     id: int
     translation_vec: np.ndarray
+    tvec_uncertainty: float
     psi: float
+    psi_uncertainty: float
 
 
 @dataclasses.dataclass
@@ -109,13 +111,24 @@ class FRODO_Sensors:
 
             psi = qmt.wrapToPi(-angle + np.deg2rad(180))[0]
 
+            tvec_uncertainty, psi_uncertainty = FRODO_Sensors._dummy_uncertainty(pos_vector, psi)
+
             measurement_processed = FRODO_ArucoMeasurement_processed(id=aruco_id,
                                                                      translation_vec=pos_vector,
-                                                                     psi=psi)
+                                                                     tvec_uncertainty=tvec_uncertainty,
+                                                                     psi=psi,
+                                                                     psi_uncertainty=psi_uncertainty)
             aruco_measurements.append(measurement_processed)
 
         with self._data_lock:
             self.data.aruco_measurements = aruco_measurements
+
+    # ------------------------------------------------------------------------------------------------------------------
+    @staticmethod
+    def _dummy_uncertainty(tvec, psi):
+        norm = math.sqrt(tvec[0]**2 + tvec[1]**2)
+        return 2*norm, 2*psi
+
 
     # ------------------------------------------------------------------------------------------------------------------
     def _arucoMeasurement_callback(self, measurements, *args, **kwargs):
